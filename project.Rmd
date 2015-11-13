@@ -1,0 +1,41 @@
+---
+title: "PML-Project"
+author: "maverix13"
+date: "November 9, 2015"
+output: html_document
+---
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this report, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants for quantification of quality. Participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Loading Data
+
+Both Training and Test sets are downloaded if not present. Test data is set aside for final submission. 
+
+### Cleaning Data
+
+While reading the data, strings as 'NA', '#DIV/0!' and empty strings are converted to NA. Looking at the NA count for each column made it obvious that certain columns have more than 95% values missing while other columns contained all the data. Columns with missing values are further removed from the dataset (Training and Test). 
+
+```{r}
+if(!file.exists("data"))
+        dir.create("data")
+if(!file.exists("data/pml-training.csv")) {
+        setwd("data/")
+        fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+        download.file(fileURL, "pml-training.csv", method = "curl")
+        fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+        download.file(fileURL, "pml-testing.csv", method = "curl")
+        setwd("../")
+}
+training <- read.csv("data/pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+na_count <-sapply(training, function(y) sum(length(which(is.na(y)))))
+na_count <- data.frame(na_count)
+count_clean <- subset(na_count, na_count == 0)
+columns <- rownames(count_clean)
+
+training <- training[, columns]
+
+head(training)
+```
+
+
