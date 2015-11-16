@@ -6,15 +6,29 @@ output: html_document
 ---
 ## Introduction
 
-Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this report, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants for quantification of quality. Participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.  
 
-## Loading Data
+Six young healthy participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3rZ83af9K
+
+## Data Analysis and Pre-processing
 
 Both Training and Test sets are downloaded if not present. Test data is set aside for final submission. 
 
 ### Cleaning Data
 
-While reading the data, strings as 'NA', '#DIV/0!' and empty strings are converted to NA. Looking at the NA count for each column made it obvious that certain columns have more than 95% values missing while other columns contained all the data. Columns with missing values are further removed from the dataset (Training and Test). 
+While reading the data, strings as 'NA', '#DIV/0!' and empty strings are converted to NA. Looking at the NA count for each column made it obvious that certain columns have more than 95% values missing while other columns contained all the data. Columns with missing values are removed from the dataset (Training and Test). Also, first few columns are related to the test person and time frames which are not needed as predictors. These columns are also removed from the dataset. 
+
+```{r, message=FALSE, echo=FALSE}
+library(caret)
+library(ggplot2)
+library(doParallel)
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+```
 
 ```{r}
 if(!file.exists("data"))
@@ -23,19 +37,98 @@ if(!file.exists("data/pml-training.csv")) {
         setwd("data/")
         fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
         download.file(fileURL, "pml-training.csv", method = "curl")
+        setwd("../")
+}
+if(!file.exists("data/pml-testing.csv")) {
+        setwd("data/")
         fileURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
         download.file(fileURL, "pml-testing.csv", method = "curl")
         setwd("../")
 }
-training <- read.csv("data/pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
-na_count <-sapply(training, function(y) sum(length(which(is.na(y)))))
+data.init <- read.csv("data/pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+data.init <- data.init[,-c(1:7)]
+na_count <-sapply(data.init, function(y) sum(length(which(is.na(y)))))
 na_count <- data.frame(na_count)
-count_clean <- subset(na_count, na_count == 0)
-columns <- rownames(count_clean)
+na_count <- subset(na_count, na_count > 0)
+columns <- rownames(na_count)
 
-training <- training[, columns]
+data.init <- data.init[, !(names(data.init) %in% columns)]
+test.final <- read.csv("data/pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+test.final <- test.final[, -c(1:7)]
+test.final <- test.final[, !(names(test.final) %in% columns)]
 
-head(training)
+# Correlation
+
+corData <- data.init[, -ncol(data.init)]
+highCor <- findCorrelation(cor(corData), cutoff = 0.9)
+data.init <- data.init[,-highCor]
 ```
 
+Dataset has 100 columns with missing values more than 19216. These columns are dropped from the dataset.
 
+### Partitioning Data
+
+Data is further paritioned to training and test data to calculate out of sample error. As per the suggestion in lecture, data is partitioned with 60% retained for training and 40% for testing. 
+
+
+```{r}
+inTrain <- createDataPartition(y = data.init$classe, p = 0.6, list = FALSE)
+trainHAR <- data.init[inTrain,]
+testHAR <- data.init[-inTrain,]
+```
+
+## Model Building and Prediction
+
+Various models are implemented to compare error rates: Predicting with trees(rpart), Random Forest(rf) and Boosting(gbm). For initial comparison, default control parameters are used. We calculate confusion matrix to compare in sample accuracy.
+
+```{r cache=TRUE, echo=FALSE, message=FALSE, results= FALSE}
+set.seed(1234)
+modelRpart <- train(classe ~ ., data = trainHAR, method = "rpart")
+set.seed(1234)
+modelRf <- train(classe ~ ., data = trainHAR, method = "rf")
+set.seed(1234)
+modelGbm <- train(classe ~ ., data = trainHAR, method = "gbm")
+```
+
+```{r}
+cmRpart <- confusionMatrix(predict(modelRpart, newdata = trainHAR), trainHAR$classe)
+errorRpart <- (1 - cmRpart$overall['Accuracy']) * 100
+cmRf <- confusionMatrix(predict(modelRf, newdata = trainHAR), trainHAR$classe)
+errorRf <- (1 - cmRf$overall['Accuracy']) * 100
+cmGbm <- confusionMatrix(predict(modelGbm, newdata = trainHAR), trainHAR$classe)
+errorGbm <- (1 - cmGbm$overall['Accuracy']) * 100
+```
+
+Summary of models with In Sample Errors
+
+Method | In Sample Error
+-------|----------------
+Recursive Partitioning | `r round(errorRpart, 1)`%
+Random Forest | `r round(errorRf, 1)`%
+Boosting | `r round(errorGbm, 1)`%
+
+As the table shows, Random Forest provided highest accuracy. Next we fine tune Random Forest with 10-fold cross validation repeated 5 times.
+
+```{r cache = TRUE, echo = FALSE}
+ctrlRf <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
+set.seed(1234)
+modelRfCv <- train(classe ~ ., data = trainHAR, nethod = "rf", trControl = ctrlRf)
+```
+
+```{r}
+cmRfCv <- confusionMatrix(predict(modelRfCv, newdata = testHAR), testHAR$classe)
+errorRfCv <- (1 - cmRfCv$overall['Accuracy']) * 100
+```
+
+Summary of Random Forest with Out of Sample Errors
+
+Method | Out of Sample Error
+-------|----------------
+Random Forest | `r round(errorRfCv, 1)`%
+
+## Applying Model to Final Test Data
+```{r}
+cmRfCvFinal <- predict(modelRfCv, newdata = test.final)
+summary(cmRfCvFinal)
+cmRfCvFinal
+```
