@@ -107,7 +107,7 @@ Recursive Partitioning | `r round(errorRpart, 1)`%
 Random Forest | `r round(errorRf, 1)`%
 Boosting | `r round(errorGbm, 1)`%
 
-As the table shows, Random Forest provided highest accuracy. Next we fine tune Random Forest with 10-fold cross validation repeated 5 times.
+As the table shows, Random Forest provided highest accuracy. Next we fine tune Random Forest with 10-fold cross validation repeated 5 times. 
 
 ```{r cache = TRUE, echo = FALSE}
 ctrlRf <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
@@ -132,3 +132,6 @@ cmRfCvFinal <- predict(modelRfCv, newdata = test.final)
 summary(cmRfCvFinal)
 cmRfCvFinal
 ```
+
+Final submission is done by creating files based on the code provided on course assignment page.
+Score after submission is 20/20 meaning all the predictions are correct.
